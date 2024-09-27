@@ -61,11 +61,21 @@ find_mtd_chardev() {
 	echo "${INDEX:+$PREFIX$INDEX}"
 }
 
+get_mac_ascii() {
+	local part="$1"
+	local key="$2"
+	local mac_dirty
+
+	mac_dirty=$(strings "$part" | sed -n 's/^'"$key"'=//p')
+
+	# "canonicalize" mac
+	[ -n "$mac_dirty" ] && macaddr_canonicalize "$mac_dirty"
+}
+
 mtd_get_mac_ascii() {
 	local mtdname="$1"
 	local key="$2"
 	local part
-	local mac_dirty
 
 	part=$(find_mtd_part "$mtdname")
 	if [ -z "$part" ]; then
@@ -73,10 +83,7 @@ mtd_get_mac_ascii() {
 		return
 	fi
 
-	mac_dirty=$(strings "$part" | sed -n 's/^'"$key"'=//p')
-
-	# "canonicalize" mac
-	[ -n "$mac_dirty" ] && macaddr_canonicalize "$mac_dirty"
+	get_mac_ascii "$part" "$key"
 }
 
 mtd_get_mac_text() {
@@ -123,6 +130,15 @@ mtd_get_mac_binary_ubi() {
 	get_mac_binary "/dev/$part" "$offset"
 }
 
+mtd_get_mac_binary_mmc() {
+	local mtdname="$1"
+	local offset="$2"
+	local part
+
+	part=$(find_mmc_part "$mtdname")
+	get_mac_binary "$part" "$offset"
+}
+
 mtd_get_part_size() {
 	local part_name=$1
 	local first dev size erasesize name
@@ -135,6 +151,29 @@ mtd_get_part_size() {
 	done < /proc/mtd
 }
 
+mmc_get_mac_ascii() {
+	local part_name="$1"
+	local key="$2"
+	local part
+
+	part=$(find_mmc_part "$part_name")
+	if [ -z "$part" ]; then
+		echo "mmc_get_mac_ascii: partition $part_name not found!" >&2
+		return
+	fi
+
+	get_mac_ascii "$part" "$key"
+}
+
+mmc_get_mac_binary() {
+	local part_name="$1"
+	local offset="$2"
+	local part
+
+	part=$(find_mmc_part "$part_name")
+	get_mac_binary "$part" "$offset"
+}
+
 macaddr_add() {
 	local mac=$1
 	local val=$2
@@ -143,6 +182,14 @@ macaddr_add() {
 
 	nic=$(printf "%06x" $((0x${nic//:/} + val & 0xffffff)) | sed 's/^\(.\{2\}\)\(.\{2\}\)\(.\{2\}\)/\1:\2:\3/')
 	echo $oui:$nic
+}
+
+macaddr_generate_from_mmc_cid() {
+	local mmc_dev=$1
+
+	local sd_hash=$(sha256sum /sys/class/block/$mmc_dev/device/cid)
+	local mac_base=$(macaddr_canonicalize "$(echo "${sd_hash}" | dd bs=1 count=12 2>/dev/null)")
+	echo "$(macaddr_unsetbit_mc "$(macaddr_setbit_la "${mac_base}")")"
 }
 
 macaddr_geteui() {
@@ -182,7 +229,7 @@ macaddr_unsetbit_mc() {
 
 macaddr_random() {
 	local randsrc=$(get_mac_binary /dev/urandom 0)
-
+	
 	echo "$(macaddr_unsetbit_mc "$(macaddr_setbit_la "${randsrc}")")"
 }
 
@@ -223,4 +270,8 @@ macaddr_canonicalize() {
 	[ ${#canon} -ne 17 ] && return
 
 	printf "%02x:%02x:%02x:%02x:%02x:%02x" 0x${canon// / 0x} 2>/dev/null
+}
+
+dt_is_enabled() {
+	grep -q okay "/proc/device-tree/$1/status"
 }

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
-/dts-v1/;
 
 #include "mt7621.dtsi"
 
@@ -43,12 +42,12 @@
 		compatible = "gpio-leds";
 
 		led_run: run {
-			label = "gl-mt1300:blue:run";
+			label = "blue:run";
 			gpios = <&gpio 14 GPIO_ACTIVE_HIGH>;
 		};
 
 		system {
-			label = "gl-mt1300:white:system";
+			label = "white:system";
 			gpios = <&gpio 13 GPIO_ACTIVE_HIGH>;
 		};
 	};
@@ -68,9 +67,8 @@
 	flash@0 {
 		compatible = "jedec,spi-nor";
 		reg = <0>;
-		spi-max-frequency = <80000000>;
+		spi-max-frequency = <50000000>;
 		broken-flash-reset;
-		m25p,fast-read;
 
 		partitions {
 			compatible = "fixed-partitions";
